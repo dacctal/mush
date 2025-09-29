@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+# mush - music in the shell
+
+mkdir -p ~/.config/mush
+if [ ! -f ~/.config/mush/config.sh.example ]; then
+    echo """#!/usr/bin/env bash
+# THIS FILE IS AN EXAMPLE.
+# TO HAVE A VALID CONFIGURATION,
+# COPY THIS FILE'S CONTENTS TO:
+# ~/.config/mush/config.sh
+#
+# make sure you have all your music inside
+# the directory you choose.
+#
+# all playlists and groups will exist in
+# their own subdirectories inside this one.
+MUSIC_DIR=\"/path/to/music\"""" >>~/.config/mush/config.sh.example
+fi
+
+if [ ! -f ~/.config/mush/config.sh ]; then
+    echo "your config file doesn't exist!!"
+    echo "go to: ~/.config/mush/"
+    echo "copy the contents of config.sh.example"
+    echo "paste into config.sh"
+    exit 1
+fi
+
+# - functions
+color() {
+    echo -e "${1}$2${reset}"
+}
+
+or() {
+    color "$yellow" "|"
+}
+
+exmpl() {
+    color "$blue" "$1"
+}
+
+shortopt() {
+    if [ $# == 2 ]; then
+        echo "$(color "$bold_green" "$1") $(exmpl "$2")"
+    else
+        color "$bold_green" "$1"
+    fi
+}
+
+longopt() {
+    if [ $# == 2 ]; then
+        echo "$(color "$cyan" "$1") $(exmpl "$2")"
+    else
+        color "$cyan" "$1"
+    fi
+}
+
+desc() {
+    color "$gray" "# $1"
+}
+
+play_music() {
+    mpv "${songs[@]}" --no-video --loop-playlist=inf --audio-display=no
+}
+
+play_music_shuffled() {
+    mpv "${songs[@]}" --no-video --loop-playlist=inf --audio-display=no --shuffle
+}
+
+add_playlist() {
+    NEWPLNAME="$2"
+    touch "$PLAYLIST_DIR/$NEWPLNAME.m3u8"
+    echo "#EXTM3U" >>"$PLAYLIST_DIR/$NEWPLNAME.m3u8"
+    for plsong in "${@:3}"; do
+        echo "#EXTINF:-1" >>"$PLAYLIST_DIR/$NEWPLNAME.m3u8"
+        echo "../$(ls | grep "$plsong")" >>"$PLAYLIST_DIR/$NEWPLNAME.m3u8"
+    done
+}
+
+add_playlist_group() {
+    cd $PLAYLIST_DIR
+    NEWPLGROUP="$2"
+    mkdir -p "$PLAYLIST_GROUP_DIR"
+    touch "$PLAYLIST_GROUP_DIR/$NEWPLGROUP.m3u8"
+    for playlist in "${@:3}"; do
+        echo "#EXTINF:-1" >>"$PLAYLIST_GROUP_DIR/$NEWPLGROUP.m3u8"
+        echo "../$(ls | grep "$playlist")" >>"$PLAYLIST_GROUP_DIR/$NEWPLGROUP.m3u8"
+    done
+}
+
+list() {
+    echo "$(color "$1" "$(find $2 -mindepth 1 -maxdepth 1 -type f -exec basename {} .$3 \;)")"
+}
+
+down_load() {
+    DOWNLOAD_NUMBER=1
+    for url in "${@:2}"; do
+        echo $(color "$magenta" "downloading: [ $DOWNLOAD_NUMBER / $(($# - 1)) ]")
+        if curl -s "$url" | grep -q "youtube.com/playlist"; then
+            WEB_PL="$(curl -s "$url" | grep --color=never -oP "<meta property=\"og:title\" content=\".*?\">")"
+            WEB_PL=${WEB_PL//<meta property=\"og:title\" content=\"/}
+            WEB_PL=${WEB_PL//\">/}
+            WEB_PL=${WEB_PL//\ /"-"}
+            WEB_PL=${WEB_PL//&#39;/"'"}
+            WEB_PL=${WEB_PL,,}
+            echo $(color "$green" "[!STATUS]") "downloading playlist \"$WEB_PL\" from youtube"
+            yt-dlp -q --progress -x --audio-format flac -o "%(artist)s - %(track)s.%(ext)s" --embed-thumbnail --convert-thumbnail jpg --exec-before-download "ffmpeg -i %(thumbnails.-1.filepath)q -vf crop=\"'if(gt(ih,iw),iw,ih)':'if(gt(iw,ih),ih,iw)'\" _%(thumbnails.-1.filepath)q" --exec-before-download "rm %(thumbnails.-1.filepath)q" --exec-before-download "mv _%(thumbnails.-1.filepath)q %(thumbnails.-1.filepath)q" --embed-metadata --cookies "$MUSIC_DIR"/cookies/cookies.txt "$url"
+            read -p "$(color "$blue" "[!PROMPT]") auto-generate this playlist? $(color "$blue" "[y/n]"): " autogenpl
+            case "${autogenpl,,}" in
+            n)
+                echo "no playlist created"
+                ;;
+            *)
+                echo "auto-generating playlist \"$WEB_PL\""
+                echo "#EXTM3U" >>"$PLAYLIST_DIR/$WEB_PL.m3u8"
+                IFS=$'\n'
+                for song in $(yt-dlp --flat-playlist --dump-single-json "$url" | grep --color=never -oP "\"title\": \".*?\"" | tail -n +2); do
+                    song=${song//\\u2019/"’"}
+                    song=${song//\"title\": \"/}
+                    song=${song//\"/}
+                    echo "adding $song"
+                    echo "#EXTINF:-1" >>"$PLAYLIST_DIR/$WEB_PL.m3u8"
+                    echo "../$(ls | grep "$song")" >>"$PLAYLIST_DIR/$WEB_PL.m3u8"
+                done
+                echo "playlist \"$WEB_PL\" created"
+                echo -e $(color "$magenta" "[!INFO]") "run \"mush lp\" to view all playlists"
+                ;;
+            esac
+        else
+            yt-dlp -q --progress -x --audio-format flac -o "%(artist)s - %(track)s.%(ext)s" --embed-thumbnail --convert-thumbnail jpg --exec-before-download "ffmpeg -i %(thumbnails.-1.filepath)q -vf crop=\"'if(gt(ih,iw),iw,ih)':'if(gt(iw,ih),ih,iw)'\" _%(thumbnails.-1.filepath)q" --exec-before-download "rm %(thumbnails.-1.filepath)q" --exec-before-download "mv _%(thumbnails.-1.filepath)q %(thumbnails.-1.filepath)q" --embed-metadata --cookies "$MUSIC_DIR"/cookies/cookies.txt "$url"
+        fi
+        echo $(color "$magenta" "completed: [ $DOWNLOAD_NUMBER / $(($# - 1)) ]")
+        ((DOWNLOAD_NUMBER++))
+    done
+}
+
+mush_help() {
+    echo -e """
+  $(color "$bold_magenta" "mush") - music in the shell
+
+  $(color "$red" "Usage:")
+  $(desc "with no options, 'mush' will play all songs you have in the specified music directory in alphabetical order")
+
+  $(shortopt "h")   $(or)   $(longopt "--help")
+  $(desc "display this usage screen")
+
+  $(shortopt "ap" "[name] \"[songs]\"") $(or)   $(longopt "--add-playlist")
+  $(desc "adds a playlist (with selected songs, if specified)")
+
+  $(shortopt "apg" "[name] \"[playlists]\"")    $(or)   $(longopt "--add-playlist-group")
+  $(desc "adds a playlist group")
+
+  $(shortopt "d" "\"[url]\"")   $(or)   $(longopt "--download")
+  $(desc "downloads song/playlist from the specified URL")
+
+  $(shortopt "lp"),   $(longopt "--list-playlists")
+  $(desc "lists all playlists")
+
+  $(shortopt "lpg"),   $(longopt "--list-playlist-groups")
+  $(desc "lists all playlist groups")
+
+  $(shortopt "ls"),   $(longopt "--list-songs")
+  $(desc "lists all songs")
+
+  $(shortopt "pp"),   $(longopt "--play-playlist")
+  $(desc "plays all music in a playlist")
+
+  $(shortopt "ppg"),   $(longopt "--play-playlist-group")
+  $(desc "plays all music in a playlist group")
+
+  $(shortopt "rp"),   $(longopt "--remove-playlist")
+  $(desc "removes a playlist")
+
+  $(shortopt "rpg"),   $(longopt "--remove-playlist-group")
+  $(desc "removes a playlist group")
+  """
+}
+
+play_all() {
+    if [ $(($# >= 1)) ]; then
+        for arg in "$@"; do
+            while IFS= read -r song; do
+                songs+=("$song")
+            done < <(ls | grep "$arg")
+        done
+        play_music
+    else
+        songs=(*)
+        play_music
+    fi
+}
+
+play_all_shuffled() {
+    if [ $(($# >= 2)) ]; then
+        for arg in "${@:1}"; do
+            while IFS= read -r song; do
+                songs+=("$song")
+            done < <(ls | grep "$arg")
+        done
+        play_music_shuffled
+    else
+        songs=(*)
+        play_music_shuffled
+    fi
+}
+# - functions
+
+# - vars
+source ~/.config/mush/config.sh
+
+if [ ! -d "$MUSIC_DIR" ]; then
+    echo "[!] Your music directory is not set!"
+    echo "[!] Edit the mush script and add it!"
+    echo "[!] (Default install directory: /usr/bin/mush)"
+fi
+
+PLAYLIST_DIR="$MUSIC_DIR/playlists"
+PLAYLIST_GROUP_DIR="$PLAYLIST_DIR/groups"
+
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+blue='\033[0;34m'
+magenta='\033[0;35m'
+cyan='\033[0;36m'
+gray='\033[0;37m'
+bold_red='\033[1;31m'
+bold_green='\033[1;32m'
+bold_yellow='\033[1;33m'
+bold_blue='\033[1;34m'
+bold_magenta='\033[1;35m'
+bold_cyan='\033[1;36m'
+bold_gray='\033[1;37m'
+reset='\033[0m'
+
+songs=()
+# - vars
+
+songs=()
+
+cd $MUSIC_DIR
+
+if [ "$#" -gt 0 ]; then
+    case "$1" in
+    ap | --add-playlist)
+        add_playlist "$@"
+        ;;
+    apg | --add-playlist-group)
+        add_playlist_group "$@"
+        ;;
+    lp | --list-playlists)
+        list "$blue" "$PLAYLIST_DIR" "m3u8"
+        ;;
+    lpg | --list-playlist-groups)
+        list "$magenta" "$PLAYLIST_GROUP_DIR" "m3u8"
+        ;;
+    ls | --list-songs)
+        list "$green" "$MUSIC_DIR" "flac"
+        ;;
+    pp | --play-playlist)
+        songs="$PLAYLIST_DIR/$2.m3u8"
+        play_music
+        ;;
+    ppg | --play-playlist-group)
+        songs="$PLAYLIST_GROUP_DIR/$2.m3u8"
+        play_music
+        ;;
+    rp | --remove-playlist)
+        PLNAME="$2"
+        rm "$PLAYLIST_DIR/$PLNAME.m3u8"
+        ;;
+    rpg | --remove-playlist-group)
+        PLGNAME="$2"
+        rm "$PLAYLIST_GROUP_DIR/$PLGNAME.m3u8"
+        ;;
+    d | --download)
+        down_load "$@"
+        ;;
+    h | --help)
+        mush_help
+        ;;
+    sh | --shuffle)
+        play_all_shuffled "$@"
+        ;;
+    *)
+        play_all "$@"
+        ;;
+    esac
+else
+    songs=(*)
+    play_music
+fi
