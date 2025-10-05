@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PKGIT_GIT_URL="$1"
+pkg="$2"
+tag="$3"
+BUILD_DIR=$4
+BIN_DIR=$5
+PKGS_DIR=$6
+
+PKGIT_DEPS=("https://github.com/mpv-player/mpv.git" "https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file" "https://github.com/FFmpeg/FFmpeg" "https://github.com/curl/curl" "https://github.com/quodlibet/mutagen")
+
+SRC_DIR="$BUILD_DIR/$pkg-$tag"
+rm -rf "$SRC_DIR"
+
+install_dependencies() {
+    for dep in "${PKGIT_DEPS[@]:-}"; do
+        [[ -z "$dep" ]] && continue
+        depname=$(basename "$dep" .git | tr '[:upper:]' '[:lower:]')
+        echo "[pkgit] Installing dependency: $depname"
+        pkgit ar "$dep"
+        pkgit i "$dep"
+    done
+}
+
+install_dependencies
+
+if which doas; then
+    su=doas
+elif which sudo; then
+    su=sudo
+else
+    echo "[ERROR] Cannot get root access"
+    return 1
+fi
+
+if [ -f "mush" ]; then
+    "$su" cp mush "/usr/local/bin"
+else
+    curl "https://raw.githubusercontent.com/dacctal/mush/refs/heads/main/mush" >>mush
+    chmod +x mush
+    "$su" mv mush /usr/local/bin
+fi

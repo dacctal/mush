@@ -140,16 +140,16 @@ mush_help() {
   $(color "$red" "Usage:")
   $(desc "with no options, 'mush' will play all songs you have in the specified music directory in alphabetical order")
 
-  $(shortopt "h")   $(or)   $(longopt "--help")
+  $(shortopt "h"),   $(longopt "--help")
   $(desc "display this usage screen")
 
-  $(shortopt "ap" "[name] \"[songs]\"") $(or)   $(longopt "--add-playlist")
+  $(shortopt "ap" "[name] \"[songs]\""),   $(longopt "--add-playlist")
   $(desc "adds a playlist (with selected songs, if specified)")
 
-  $(shortopt "apg" "[name] \"[playlists]\"")    $(or)   $(longopt "--add-playlist-group")
+  $(shortopt "apg" "[name] \"[playlists]\""),   $(longopt "--add-playlist-group")
   $(desc "adds a playlist group")
 
-  $(shortopt "d" "\"[url]\"")   $(or)   $(longopt "--download")
+  $(shortopt "d" "\"[url]\""),   $(longopt "--download")
   $(desc "downloads song/playlist from the specified URL")
 
   $(shortopt "lp"),   $(longopt "--list-playlists")
