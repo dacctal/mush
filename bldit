@@ -29,17 +29,8 @@ install_dependencies() {
 
 install_dependencies
 
-if which doas; then
-    su=doas
-elif which sudo; then
-    su=sudo
-else
-    echo "[ERROR] Cannot get root access"
-    return 1
-fi
-
 if [ -f "mush" ]; then
-    "$su" cp mush "/usr/local/bin"
+    ln -sf "mush" "$BIN_DIR/mush"
 else
     curl "https://raw.githubusercontent.com/dacctal/mush/refs/heads/main/mush" >>mush
     chmod +x mush
