@@ -1,38 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-if [ -f "deps.sh" ]; then
-    source "deps.sh"
-else
-    DEPS=()
-fi
-
-PKGIT_GIT_URL="$1"
-pkg="$2"
-tag="$3"
-BUILD_DIR=$4
-BIN_DIR=$5
-PKGS_DIR=$6
-
-SRC_DIR="$BUILD_DIR/$pkg-$tag"
-rm -rf "$SRC_DIR"
-
-install_dependencies() {
-    for dep in "${DEPS[@]:-}"; do
-        [[ -z "$dep" ]] && continue
-        depname=$(basename "$dep" .git | tr '[:upper:]' '[:lower:]')
-        echo "[pkgit] Installing dependency: $depname"
-        pkgit ar "$dep"
-        pkgit i "$dep"
-    done
-}
-
-install_dependencies
-
-if [ -f "mush" ]; then
-    ln -sf "mush" "$BIN_DIR/mush"
-else
-    curl "https://raw.githubusercontent.com/dacctal/mush/refs/heads/main/mush" >>mush
+bldit() {
     chmod +x mush
-    "$su" mv mush /usr/local/bin
-fi
+}
